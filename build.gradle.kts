@@ -26,6 +26,7 @@ dependencies {
     implementation(libs.auto.service)
     implementation(libs.jackson.module.kotlin)
     implementation(libs.jackson.module.jsr310)
+    implementation(libs.jsonpath)
     implementation(libs.okhttp)
     implementation(libs.okhttp.urlconnection)
     implementation(libs.playwright)

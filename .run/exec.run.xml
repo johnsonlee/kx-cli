@@ -2,7 +2,7 @@
   <configuration default="false" name="exec" type="JetRunConfigurationType">
     <option name="MAIN_CLASS_NAME" value="io.johnsonlee.exec.MainKt" />
     <module name="exec.main" />
-    <option name="PROGRAM_PARAMETERS" value="antibot" />
+    <option name="PROGRAM_PARAMETERS" value="json2csv -d , -i https://raw.githubusercontent.com/johnsonlee/TVBox/refs/heads/main/api.json --row &quot;.sites[*] | {key: .key, name: .name, api: .api}&quot;" />
     <shortenClasspath name="NONE" />
     <method v="2">
       <option name="Make" enabled="true" />
