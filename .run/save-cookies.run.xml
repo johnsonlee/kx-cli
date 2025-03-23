@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="save-cookies" type="JetRunConfigurationType">
+    <option name="MAIN_CLASS_NAME" value="io.johnsonlee.exec.cmd.SaveCookiesCommandKt" />
+    <module name="exec.save-cookies.main" />
+    <option name="PROGRAM_PARAMETERS" value="https://johnsonlee.io --output build/cookies.json" />
+    <shortenClasspath name="NONE" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

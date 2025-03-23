@@ -12,35 +12,24 @@ plugins {
     id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
-group = "io.johnsonlee"
-version = project.findProperty("version")?.takeIf { it != DEFAULT_VERSION } ?: "1.0.0-SNAPSHOT"
+allprojects {
+    group = "io.johnsonlee.exec"
+    version = project.findProperty("version")?.takeIf { it != DEFAULT_VERSION } ?: "1.0.0-SNAPSHOT"
 
-repositories {
-    mavenCentral()
-    google()
+    repositories {
+        mavenCentral()
+        google()
+    }
 }
 
 dependencies {
-    kapt(libs.auto.service)
-    kapt(libs.pico.codegen)
-
-    implementation(kotlin("bom"))
-    implementation(kotlin("stdlib"))
-    implementation(libs.auto.service)
-    implementation(libs.jackson.module.kotlin)
-    implementation(libs.jackson.module.jsr310)
-    implementation(libs.jsonpath)
-    implementation(libs.okhttp)
-    implementation(libs.okhttp.urlconnection)
-    implementation(libs.playwright)
-    implementation(libs.pico.cli)
-
-    testImplementation(kotlin("test"))
-    testImplementation(kotlin("test-junit"))
+    implementation(project(":fetch"))
+    implementation(project(":json2csv"))
+    implementation(project(":save-cookies"))
 }
 
 val shadowJar by tasks.getting(ShadowJar::class) {
-    archiveBaseName.set("exec")
+    archiveBaseName.set(project.name)
     archiveClassifier.set("all")
     archiveVersion.set("${project.version}")
     manifest {
@@ -73,6 +62,7 @@ setOf("linux", "linux-arm64", "mac", "mac-arm64", "win32_x64").let { platforms -
                     }
                     return false
                 }
+
                 override fun transform(context: TransformerContext) = Unit
                 override fun hasTransformedResource() = false
                 override fun modifyOutputStream(os: ZipOutputStream, preserveFileTimestamps: Boolean) = Unit

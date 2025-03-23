@@ -1,10 +1,10 @@
 package io.johnsonlee.exec
 
-import io.johnsonlee.exec.cmd.Exec
 import io.johnsonlee.exec.cmd.Command
-import picocli.CommandLine
-import java.util.*
+import io.johnsonlee.exec.cmd.Exec
+import java.util.ServiceLoader
 import kotlin.system.exitProcess
+import picocli.CommandLine
 
 fun main(array: Array<String>) {
     val cmdline = CommandLine(Exec())

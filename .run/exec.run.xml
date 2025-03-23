@@ -1,8 +1,8 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="exec" type="JetRunConfigurationType">
+  <configuration default="false" name="exec" type="JetRunConfigurationType" singleton="false">
     <option name="MAIN_CLASS_NAME" value="io.johnsonlee.exec.MainKt" />
     <module name="exec.main" />
-    <option name="PROGRAM_PARAMETERS" value="json2csv -d , -i https://raw.githubusercontent.com/johnsonlee/TVBox/refs/heads/main/api.json --row &quot;.sites[*] | {key: .key, name: .name, api: .api}&quot;" />
+    <option name="PROGRAM_PARAMETERS" value="json2csv -d , --row &quot;.sites[*] | {key: .key, name: .name, api: .api}&quot; https://raw.githubusercontent.com/johnsonlee/TVBox/refs/heads/main/api.json" />
     <shortenClasspath name="NONE" />
     <method v="2">
       <option name="Make" enabled="true" />

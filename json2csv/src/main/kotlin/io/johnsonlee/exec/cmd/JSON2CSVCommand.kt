@@ -1,15 +1,20 @@
 package io.johnsonlee.exec.cmd
 
-import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.SerializationFeature
 import com.fasterxml.jackson.databind.node.TextNode
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.google.auto.service.AutoService
 import com.jayway.jsonpath.Configuration
-import com.jayway.jsonpath.DocumentContext
 import com.jayway.jsonpath.JsonPath
 import com.jayway.jsonpath.spi.json.JacksonJsonNodeJsonProvider
-import io.johnsonlee.exec.internal.jackson.objectMapper
-import picocli.CommandLine.Option
+import io.johnsonlee.exec.cmd.JSON2CSVCommand.Companion.objectMapper
+import io.johnsonlee.exec.internal.capitalize
 import java.io.File
+import kotlin.system.exitProcess
+import picocli.CommandLine
+import picocli.CommandLine.Option
 
 /**
  * Converts JSON into CSV with flexible row selection and powerful column extraction capabilities.
@@ -45,7 +50,7 @@ import java.io.File
  *
  * Example:
  * ```
- * .items[*] | {id=.id, name=.name}
+ * .items[*] | {id:.id, name:.name}
  * ```
  *
  * ### 3. Object Definition Columns
@@ -54,9 +59,8 @@ import java.io.File
  *
  * Example:
  * ```
- * .items[*] | {id=.id, name=.name, status=$.status}
+ * .items[*] | {id:.id, name:.name, status:$.status}
  * ```
- * In this case, the `address` column will contain a JSON object with `city` and `street` fields.
  *
  * ### 4. Named Global Variables
  * Named variables can be dynamically created within pipelines using the `as $variableName` syntax.
@@ -72,7 +76,7 @@ import java.io.File
  * Named variables can be used to store intermediate results, making complex pipelines more readable.
  * Example:
  * ```
- * items[*] as $item | {id=$item.id, name=$item.name}
+ * items[*] as $item | {id:$item.id, name:$item.name}
  * ```
  *
  * Named variables:
@@ -86,7 +90,7 @@ import java.io.File
  *
  * Example:
  * ```
- * order_id=id
+ * order_id:id
  * ```
  * This extracts `id` from each row object directly.
  *
@@ -119,8 +123,19 @@ import java.io.File
 @AutoService(Command::class)
 class JSON2CSVCommand : FetchCommand() {
 
-    @Option(names = ["-h", "--header"], description = ["Header of columns"], required = false, defaultValue = "")
+    companion object {
+        val objectMapper = jacksonObjectMapper().apply {
+            registerKotlinModule()
+            registerModules(JavaTimeModule())
+            disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+        }
+    }
+
+    @Option(names = ["-h", "--header"], description = ["Header of columns"], required = false)
     lateinit var header: List<String>
+
+    @Option(names = ["--no-header"], description = ["No header row"], required = false)
+    var noHeader: Boolean = false
 
     @Option(names = ["-r", "--row"], description = ["Row expression"])
     lateinit var rowExpression: String
@@ -128,28 +143,40 @@ class JSON2CSVCommand : FetchCommand() {
     @Option(names = ["-d", "--delimiter"], description = ["Delimiter of columns"], required = false, defaultValue = ",")
     lateinit var delimiter: String
 
+    @Option(names = ["-q", "--text-qualifier"], description = ["Text qualifier of columns"], required = false, defaultValue = "\"")
+    lateinit var textQualifier: String
+
     override fun run() {
-        val root = loadJson(input)
+        val root = loadDocument(input)
         val global = Variable(root)
-        val variables = VariableTable(global, mapOf("\$" to global))
+        val input = Variable(TextNode.valueOf(input).toDocument())
+        val variables = VariableTable(global, mapOf("\$" to global, "\$__input__" to input))
 
         File(output).printWriter().use { printer ->
-            if (::header.isInitialized && header.isNotEmpty()) {
+            val initialPipeline = listOf(PipemillContext(rowExpression, variables))
+            val steps = parsePipemills(rowExpression)
+
+            if (noHeader) {
+                // ignore header
+            } else if (::header.isInitialized && header.isNotEmpty()) {
                 printer.println(header.joinToString(delimiter))
+            } else {
+                (steps.last() as? ObjectPipemill)?.objectDefinition?.keys?.joinToString(delimiter) {
+                    it.capitalize()
+                }?.let(printer::println)
             }
 
-            evaluateRowExpression(rowExpression, variables).forEach { row ->
+            evaluatePipeline(initialPipeline, steps).forEach { row ->
                 printer.println(row.joinToString(delimiter) {
-                    when (it) {
-                        is Iterable<*> -> it.joinToString(";")
-                        else -> it.toString()
-                    }
+                    it.asText().takeIf(String::isNotBlank)?.let { text ->
+                        "$textQualifier${text}$textQualifier"
+                    } ?: ""
                 })
             }
         }
     }
 
-    private fun loadJson(input: String): JsonNode {
+    private fun loadDocument(input: String): Document {
         val stream = if (input.startsWith("http://") || input.startsWith("https://")) {
             val response = get(url())
             if (response.isSuccessful) {
@@ -161,10 +188,11 @@ class JSON2CSVCommand : FetchCommand() {
             File(input).inputStream()
         }
 
-        return stream.buffered().use(objectMapper::readTree)
+        val json = stream.buffered().use(objectMapper::readTree)
+        return JsonPath.using(jsonPathCfg).parse(json)
     }
 
-    private fun evaluateRowExpression(expression: String, variables: VariableTable): Sequence<List<Any>> {
+    private fun evaluateRowExpression(expression: String, variables: VariableTable): Sequence<List<Node>> {
         val initialPipeline = listOf(
             PipemillContext(expression, variables)
         )
@@ -192,7 +220,7 @@ class JSON2CSVCommand : FetchCommand() {
         else -> SimplePipemill(pipemill, raw)
     }
 
-    private fun evaluatePipeline(currentNodes: List<PipemillContext>, steps: List<Pipemill>, stepIndex: Int): Sequence<List<Any>> {
+    private fun evaluatePipeline(currentNodes: List<PipemillContext>, steps: List<Pipemill>, stepIndex: Int = 0): Sequence<List<Node>> {
         if (stepIndex >= steps.size || steps.size == 1) {
             return currentNodes.map { pipeline ->
                 evaluatePipemill(steps.last(), pipeline.variables)
@@ -221,12 +249,9 @@ class JSON2CSVCommand : FetchCommand() {
         pipeline: PipemillContext,
         step: SimplePipemill
     ): List<PipemillContext> {
-        val nodes = pipeline.variables.root.context.read<List<Any>>(step.path).map {
-            objectMapper.readTree(objectMapper.writeValueAsString(it))
-        }
-
+        val nodes = pipeline.variables.root.context.evaluate<Node>(step.path)
         return nodes.map { node ->
-            val newVariables = pipeline.variables + (step.alias to Variable(node))
+            val newVariables = pipeline.variables + (step.alias to Variable(node.toDocument()))
             PipemillContext(step.path, newVariables)
         }
     }
@@ -240,7 +265,7 @@ class JSON2CSVCommand : FetchCommand() {
         }
 
         val rows = if (nodes.values.all { it.size <= 1 }) {
-            listOf(objectMapper.valueToTree<JsonNode>(nodes.mapValues { it.value.first() }.toMap()))
+            listOf(nodes.mapValues { it.value.first() }.toMap().toNode())
         } else {
             val staticValues = nodes.filterValues { it.size <= 1 }
                 .mapValues { it.value.first() }
@@ -249,33 +274,33 @@ class JSON2CSVCommand : FetchCommand() {
             cartesianProduct(arrayValues).map {
                 staticValues + it
             }.map {
-                objectMapper.valueToTree(it)
+                it.toNode()
             }
         }
 
         return rows.map { row ->
-            val newVariables = pipeline.variables + (step.alias to Variable(objectMapper.valueToTree(row)))
+            val newVariables = pipeline.variables + (step.alias to Variable(row.toDocument()))
             PipemillContext(step.expression, newVariables)
         }
     }
 
-    private fun evaluatePipemill(pipemill: Pipemill, variables: VariableTable): Sequence<List<Any>> = when (pipemill) {
+    private fun evaluatePipemill(pipemill: Pipemill, variables: VariableTable): Sequence<List<Node>> = when (pipemill) {
         is SimplePipemill -> expandSimplePipemill(pipemill, variables)
         is ObjectPipemill -> expandObjectPipemill(pipemill, variables)
     }
 
-    private fun expandObjectPipemill(pipemill: ObjectPipemill, variables: VariableTable) = sequence {
+    private fun expandObjectPipemill(pipemill: ObjectPipemill, variables: VariableTable): Sequence<List<Node>> = sequence {
         val extractedValues = pipemill.objectDefinition.mapValues { (_, path) ->
             variables.evaluate(path)
         }
 
         val rows = if (extractedValues.values.all { it.size <= 1 }) {
-            listOf(extractedValues.values.map { it.joinToString(";") })
+            listOf(extractedValues.values.map(List<Node>::first))
         } else {
             val staticValues = extractedValues.filterValues {
                 it.size <= 1
             }.mapValues {
-                it.value.firstOrNull()?.toString() ?: ""
+                it.value.first()
             }
             val arrayValues = extractedValues.filterValues { it.size > 1 }
 
@@ -298,13 +323,13 @@ class JSON2CSVCommand : FetchCommand() {
         }
     }
 
-    private fun cartesianProduct(columns: Map<String, List<Any>>): List<Map<String, Any>> {
+    private fun cartesianProduct(columns: Map<String, List<Node>>): List<Map<String, Node>> {
         if (columns.isEmpty()) return listOf(emptyMap())
 
         val keys = columns.keys.toList()
-        val result = mutableListOf<Map<String, Any>>()
+        val result = mutableListOf<Map<String, Node>>()
 
-        fun buildRow(index: Int, currentRow: Map<String, Any>) {
+        fun buildRow(index: Int, currentRow: Map<String, Node>) {
             if (index == keys.size) {
                 result.add(currentRow.toMap())
                 return
@@ -333,13 +358,28 @@ private val jsonPathCfg = Configuration.builder()
     .options(com.jayway.jsonpath.Option.DEFAULT_PATH_LEAF_TO_NULL)
     .build()
 
-private fun parseObjectDefinition(expression: String): Map<String, String> {
-    return regexNameValuePairs.findAll(expression).associate { it.groupValues[1] to it.groupValues[2] }
+typealias Document = com.jayway.jsonpath.DocumentContext
+typealias Node = com.fasterxml.jackson.databind.JsonNode
+
+fun Node.toDocument(): Document {
+    return JsonPath.using(jsonPathCfg).parse(this)
 }
 
-internal data class Variable(val node: JsonNode) {
-    val isArray = node.isArray
-    val context: DocumentContext = JsonPath.using(jsonPathCfg).parse(node)
+fun Map<String, Any>.toNode(): Node {
+    return objectMapper.valueToTree(this)
+}
+
+inline fun <reified T> Document.evaluate(path: String): T {
+    return read(path)
+}
+
+/**
+ * Represents a variable which refer to a JSON object or array.
+ *
+ * @param context The evaluated JSON object or array, which is also a JSONPath context.
+ */
+internal data class Variable(val context: Document) {
+    val isArray = context.json<Node>().isArray
 }
 
 internal data class VariableTable(
@@ -353,27 +393,21 @@ internal data class VariableTable(
 
     operator fun plus(pair: Pair<String, Variable>): VariableTable = copy(variables = variables + pair)
 
-    fun evaluate(path: String): List<Any> {
+    fun evaluate(path: String): List<Node> {
         val (context, effectivePath) = resolveEvaluationContext(path)
 
         return try {
-            val result = context.read<JsonNode>(effectivePath)
+            val result = context.read<Node>(effectivePath)
             when {
-                result.isArray -> result.elements().asSequence().map {
-                    when (it) {
-                        is TextNode -> it.asText()
-                        else -> it
-                    }
-                }.toList()
-                result is TextNode -> listOf(result.asText())
+                result.isArray -> result.elements().asSequence().toList()
                 else -> listOf(result)
             }
         } catch (e: Exception) {
-            listOf(objectMapper.readTree(""))
+            listOf(TextNode.valueOf(""))
         }
     }
 
-    private fun resolveEvaluationContext(path: String): Pair<DocumentContext, String> {
+    private fun resolveEvaluationContext(path: String): Pair<Document, String> {
         if (path.startsWith("$.")) {
             // standard root json path
             return this.global.context to path
@@ -444,4 +478,8 @@ internal data class ObjectPipemill(
     override fun copy(alias: String): Pipemill = copy(expression = expression, alias = alias)
 
     override fun toString(): String = raw
+}
+
+fun main(args: Array<String>) {
+    exitProcess(CommandLine(JSON2CSVCommand()).execute(*args))
 }

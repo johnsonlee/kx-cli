@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="html2csv" type="JetRunConfigurationType">
+    <option name="MAIN_CLASS_NAME" value="io.johnsonlee.exec.cmd.HTML2CSVCommandKt" />
+    <module name="exec.html2csv.main" />
+    <option name="PROGRAM_PARAMETERS" value="-d | --row &quot;body as $body | $body./table[3]/tbody/tr as $trans | {name: $body./table[2]/tbody/tr/td[1]/table[1]/tbody/tr[1]/td[1], date: $trans./td[2], code: $trans./td[4], amount: $trans./td[6], price: $trans./td[8], remaining: $trans./td[9]}&quot; https://www.sec.gov/Archives/edgar/data/1834584/000183458425000049/xslF345X05/wk-form4_1742432760.xml" />
+    <shortenClasspath name="NONE" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

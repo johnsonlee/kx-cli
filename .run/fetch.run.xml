@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="fetch" type="JetRunConfigurationType">
+    <option name="MAIN_CLASS_NAME" value="io.johnsonlee.exec.cmd.FetchCommandKt" />
+    <module name="exec.fetch.main" />
+    <option name="PROGRAM_PARAMETERS" value="https://raw.githubusercontent.com/johnsonlee/TVBox/refs/heads/main/api.json" />
+    <shortenClasspath name="NONE" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

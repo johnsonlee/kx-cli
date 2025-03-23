@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="json2csv" type="JetRunConfigurationType">
+    <option name="MAIN_CLASS_NAME" value="io.johnsonlee.exec.cmd.JSON2CSVCommandKt" />
+    <module name="exec.json2csv.main" />
+    <option name="PROGRAM_PARAMETERS" value="-d , --row &quot;.sites[*] as $site | {key: $site.key, name: $site.name, api: $site.api}&quot; https://raw.githubusercontent.com/johnsonlee/TVBox/refs/heads/main/api.json" />
+    <shortenClasspath name="NONE" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>

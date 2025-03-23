@@ -6,7 +6,7 @@ import java.time.Instant
 
 fun Cookie.asHttpCookie(): HttpCookie {
     val cookie = HttpCookie(name, value)
-    cookie.domain = domain
+    cookie.domain = domain.removePrefix(".")
     cookie.path = path
     cookie.secure = secure
     cookie.maxAge = expires?.let { Instant.now().epochSecond - it.toLong() } ?: -1
