@@ -1,17 +1,18 @@
 package io.johnsonlee.exec.cmd
 
 import com.google.auto.service.AutoService
-import io.johnsonlee.exec.internal.capitalize
 import java.io.File
+import java.io.InputStream
+import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import kotlin.system.exitProcess
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
+import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 import org.jsoup.select.NodeTraversor
 import org.jsoup.select.NodeVisitor
 import picocli.CommandLine
-import picocli.CommandLine.Option
 
 /**
  * Converts HTML into CSV with flexible row selection and powerful column extraction capabilities.
@@ -118,238 +119,105 @@ import picocli.CommandLine.Option
  * For further details and examples, see project documentation.
  */
 @AutoService(Command::class)
-class HTML2CSVCommand : FetchCommand() {
+class HTML2CSVCommand : DOM2CSVCommand() {
 
-    @Option(names = ["-h", "--header"], description = ["Header of columns"], required = false)
-    lateinit var header: List<String>
-
-    @Option(names = ["--no-header"], description = ["No header row"], required = false)
-    var noHeader: Boolean = false
-
-    @Option(names = ["-r", "--row"], description = ["Row expression"])
-    lateinit var rowExpression: String
-
-    @Option(names = ["-d", "--delimiter"], description = ["Delimiter of columns"], required = false, defaultValue = ",")
-    lateinit var delimiter: String
-
-    @Option(names = ["-q", "--text-qualifier"], description = ["Text qualifier of columns"], required = false, defaultValue = "\"")
-    lateinit var textQualifier: String
-
-    override fun run() {
-        val root = loadDocument(input)
-        val global = Variable(root)
-        val input = Variable(Element("A").attr("href", input).text(input))
-        val variables = VariableTable(global, mapOf("\$" to global, "\$__input__" to input))
-
-        File(output).printWriter().use { printer ->
-            val initialPipeline = listOf(PipemillContext(rowExpression, variables))
-            val steps = parsePipemills(rowExpression)
-
-            if (noHeader) {
-                // ignore header
-            } else if (::header.isInitialized && header.isNotEmpty()) {
-                printer.println(header.joinToString(delimiter))
-            } else {
-                (steps.last() as? ObjectPipemill)?.objectDefinition?.keys?.joinToString(delimiter) {
-                    it.capitalize()
-                }?.let(printer::println)
-            }
-
-            evaluatePipeline(initialPipeline, steps).forEach { row ->
-                printer.println(row.joinToString(delimiter) {
-                    it?.text()?.trim()?.let { text ->
-                        "$textQualifier${text}$textQualifier"
-                    } ?: ""
-                })
-            }
-        }
-    }
-
-    private fun loadDocument(input: String): Document {
+    override fun parse(input: String): DOMContext {
         return if (input.startsWith("http://") || input.startsWith("https://")) {
             val response = get(url())
             if (response.isSuccessful) {
                 response.body?.let { body ->
                     body.byteStream().use {
-                        Jsoup.parse(it, (body.contentType()?.charset() ?: StandardCharsets.UTF_8).name(), input)
+                        parse(it, body.contentType()?.charset())
                     }
                 } ?: error("Loading JSON from $input failed")
             } else {
                 error("Loading JSON from $input failed: ${response.code} ${response.message}")
             }
         } else {
-            Jsoup.parse(File(input))
+            File(input).inputStream().use(::parse)
         }
     }
 
-    private fun evaluateRowExpression(expression: String, variables: VariableTable): Sequence<List<Node?>> {
-        val initialPipeline = listOf(
-            PipemillContext(expression, variables)
-        )
-        val steps = parsePipemills(expression)
-        return evaluatePipeline(initialPipeline, steps, 0)
+    override fun parse(input: InputStream): DOMContext = parse(input, null)
+
+    private fun parse(input: InputStream, charset: Charset? = null): DOMContext {
+        val doc = Jsoup.parse(input, (charset ?: StandardCharsets.UTF_8).name(), this.input)
+        return XmlDOMContext(doc)
+    }
+}
+
+class XmlDOMNode(
+    node: Node,
+    override val context: DOMContext = XmlDOMContext(node as Element)
+): DOMNode {
+    override val text: String = node.text()
+    override val isIterable: Boolean = node is Element
+    override val children: List<DOMNode> = (node as Element).children().map(::XmlDOMNode)
+}
+
+class XmlDOMContext(
+    internal val context: Element
+) : DOMContext {
+
+    override val root: DOMNode
+        get() = XmlDOMNode(context, this)
+
+    override fun evaluate(path: String, variables: VariableTable): List<DOMNode> {
+        return XPath(path).evaluate(variables)
     }
 
-    private fun parsePipemills(expression: String): List<Pipemill> = expression.split("|").map {
-        parsePipemill(it.trim())
+    override fun newTextNode(value: String): DOMNode {
+        return XmlDOMNode(Element("DIV").text(value))
     }
 
-    private fun parsePipemill(pipemill: String, raw: String = pipemill): Pipemill = when {
-        // scenario:
-        // - .foo[*] as $foo
-        // - {foo: .foo, bar: .bar} as $baz
-        "as $" in pipemill -> {
-            val (path, alias) = pipemill.split("as", limit = 2).map(String::trim)
-            parsePipemill(path, pipemill).copy(alias = alias)
+    override fun newNode(attrs: Map<String, Any>): DOMNode {
+        val element = Element("virtual")
+        attrs.forEach { (key, value) ->
+            element.attr(key, value.toString())
         }
-        // scenario:
-        // - {foo: .foo, bar: .bar}"
-        pipemill.matches(regexObject) -> ObjectPipemill(pipemill, raw)
-        // scenario:
-        // - .foo[*].bar
-        else -> SimplePipemill(pipemill, raw)
-    }
-
-    private fun evaluatePipeline(currentNodes: List<PipemillContext>, steps: List<Pipemill>, stepIndex: Int = 0): Sequence<List<Node?>> {
-        if (stepIndex >= steps.size || steps.size == 1) {
-            return currentNodes.map { pipeline ->
-                evaluatePipemill(steps.last(), pipeline.variables)
-            }.asSequence().flatten()
-        }
-
-        val step = steps[stepIndex]
-        val nextNodes = currentNodes.flatMap { pipeline ->
-            parseDownstreamPipemillContext(pipeline, step)
-        }
-
-        return evaluatePipeline(nextNodes, steps, stepIndex + 1)
-    }
-
-    private fun parseDownstreamPipemillContext(
-        pipeline: PipemillContext,
-        step: Pipemill
-    ): List<PipemillContext> {
-        return when (step) {
-            is SimplePipemill -> parseSimplePipemillContext(pipeline, step)
-            is ObjectPipemill -> parseObjectPipemillContext(pipeline, step)
-        }
-    }
-
-    private fun parseSimplePipemillContext(
-        pipeline: PipemillContext,
-        step: SimplePipemill
-    ): List<PipemillContext> {
-        val nodes = pipeline.variables.evaluate(step.path)
-        return nodes.map { node ->
-            val newVariables = pipeline.variables + (step.alias to Variable(node as Element))
-            PipemillContext(step.path, newVariables)
-        }
-    }
-
-    private fun parseObjectPipemillContext(
-        pipeline: PipemillContext,
-        step: ObjectPipemill
-    ): List<PipemillContext> {
-        val nodes = step.objectDefinition.mapValues { (_, path) ->
-            pipeline.variables.evaluate(path)
-        }
-
-        val rows = if (nodes.values.all { it.size <= 1 }) {
-            listOf(nodes.mapValues { it.value.firstOrNull() }.toMap().toNode())
-        } else {
-            val staticValues = nodes.filterValues { it.size <= 1 }
-                .mapValues { it.value.firstOrNull() }
-            val arrayValues = nodes.filterValues { it.size > 1 }
-
-            cartesianProduct(arrayValues).map {
-                staticValues + it
-            }.map {
-                it.toNode()
-            }
-        }
-
-        return rows.map { row ->
-            val newVariables = pipeline.variables + (step.alias to Variable(row as Element))
-            PipemillContext(step.expression, newVariables)
-        }
-    }
-
-    private fun evaluatePipemill(pipemill: Pipemill, variables: VariableTable): Sequence<List<Node?>> = when (pipemill) {
-        is SimplePipemill -> expandSimplePipemill(pipemill, variables)
-        is ObjectPipemill -> expandObjectPipemill(pipemill, variables)
-    }
-
-    private fun expandObjectPipemill(pipemill: ObjectPipemill, variables: VariableTable): Sequence<List<Node?>> = sequence {
-        val extractedValues = pipemill.objectDefinition.mapValues { (_, path) ->
-            variables.evaluate(path)
-        }
-
-        val rows = if (extractedValues.values.all { it.size <= 1 }) {
-            listOf(extractedValues.values.map(List<Node>::firstOrNull))
-        } else {
-            val staticValues = extractedValues.filterValues {
-                it.size <= 1
-            }.mapValues {
-                it.value.firstOrNull()
-            }
-            val arrayValues = extractedValues.filterValues { it.size > 1 }
-
-            cartesianProduct(arrayValues).map {
-                staticValues + it
-            }.map {
-                it.values.toList()
-            }
-        }
-
-        rows.forEach {
-            yield(it)
-        }
-    }
-
-    private fun expandSimplePipemill(pipemill: SimplePipemill, variables: VariableTable) = sequence {
-        val extractedValues = variables.evaluate(pipemill.path)
-        extractedValues.forEach {
-            yield(listOf(it))
-        }
-    }
-
-    private fun cartesianProduct(columns: Map<String, List<Node>>): List<Map<String, Node>> {
-        if (columns.isEmpty()) return listOf(emptyMap())
-
-        val keys = columns.keys.toList()
-        val result = mutableListOf<Map<String, Node>>()
-
-        fun buildRow(index: Int, currentRow: Map<String, Node>) {
-            if (index == keys.size) {
-                result.add(currentRow.toMap())
-                return
-            }
-
-            val key = keys[index]
-            val values = columns[key] ?: emptyList()
-
-            for (value in values) {
-                buildRow(index + 1, currentRow + (key to value))
-            }
-        }
-
-        buildRow(0, emptyMap())
-        return result
+        return XmlDOMNode(element)
     }
 
 }
 
-private val regexObject = "\\s*\\{[^{}]+\\}\\s*".toRegex()
+class XPath(override val path: String) : DOMPath {
 
-private val regexNameValuePairs = "\\s*(\\w+)\\s*:\\s*([^{},]+)\\s*".toRegex()
+    override fun evaluate(variables: VariableTable): List<DOMNode> {
+        val (doc, effectivePath) = resolveEvaluationContext(path, variables)
+        return (doc as XmlDOMContext).context.selectXpath(effectivePath).map(::XmlDOMNode)
+    }
 
-typealias Document = org.jsoup.nodes.Document
-typealias Node = org.jsoup.nodes.Node
+    private fun resolveEvaluationContext(path: String, variables: VariableTable): Pair<DOMContext, String> {
+        if (path.startsWith("/")) {
+            // standard root json path
+            return variables.global.context to path
+        }
 
-fun Node.text(): String {
+        if (path.startsWith("./")) {
+            // relative json path to the current object
+            return variables.root.context to "\$$path"
+        }
+
+        // named global variables
+        val variableNameRegex = "^\\$(\\w+)".toRegex()
+        val match = variableNameRegex.find(path)
+
+        if (match != null) {
+            val variableName = "$" + match.groupValues[1]
+            val variable = variables[variableName]
+                ?: throw IllegalArgumentException("Undefined variable: $variableName")
+            val effectivePath = path.removePrefix(variableName).removePrefix("/")
+            return variable.context to effectivePath
+        }
+
+        return variables.root.context to path
+    }
+}
+
+fun org.jsoup.nodes.Node.text(): String {
     val builder = StringBuilder()
     NodeTraversor.traverse(object : NodeVisitor {
-        override fun head(node: Node, depth: Int) {
+         override fun head(node: org.jsoup.nodes.Node, depth: Int) {
             when (node) {
                 is TextNode -> builder.append(node.text())
                 is Element -> {
@@ -371,101 +239,6 @@ fun Node.text(): String {
 
     }, this)
     return builder.toString()
-}
-
-fun Map<String, Any?>.toNode(): Node {
-    val element = Element("virtual")
-    forEach { (key, value) ->
-        element.attr(key, value.toString())
-    }
-    return element
-}
-
-fun Element.evaluate(path: String): List<Element> {
-    return selectXpath(path)
-}
-
-internal data class Variable(val context: Element)
-
-internal data class VariableTable(
-    val global: Variable,
-    val variables: Map<String, Variable>
-) {
-
-    val root: Variable = this["\$"] ?: error("Root node not found")
-
-    operator fun get(name: String): Variable? = variables[name]
-
-    operator fun plus(pair: Pair<String, Variable>): VariableTable = copy(variables = variables + pair)
-
-    fun evaluate(path: String): List<Node> {
-        val (context, effectivePath) = resolveEvaluationContext(path)
-        return context.evaluate(effectivePath)
-    }
-
-    private fun resolveEvaluationContext(path: String): Pair<Element, String> {
-        if (path.startsWith("/")) {
-            // standard root json path
-            return this.global.context to path
-        }
-
-        if (path.startsWith("./")) {
-            // relative json path to the current object
-            return this.root.context to "\$$path"
-        }
-
-        // named global variables
-        val variableNameRegex = "^\\$(\\w+)".toRegex()
-        val match = variableNameRegex.find(path)
-
-        if (match != null) {
-            val variableName = "$" + match.groupValues[1]
-            val variable = variables[variableName]
-                ?: throw IllegalArgumentException("Undefined variable: $variableName")
-            val effectivePath = path.removePrefix(variableName).removePrefix("/")
-            return variable.context to effectivePath
-        }
-
-        return this.root.context to path
-    }
-
-}
-
-internal data class PipemillContext(
-    val expression: String,
-    val variables: VariableTable
-)
-
-internal sealed interface Pipemill {
-    val alias: String
-        get() = "$"
-
-    fun copy(alias: String): Pipemill
-}
-
-internal data class SimplePipemill(
-    val path: String,
-    private val raw: String = path,
-    override val alias: String = "$",
-) : Pipemill {
-    override fun copy(alias: String): SimplePipemill = copy(path = path, alias = alias)
-
-    override fun toString(): String = raw
-}
-
-internal data class ObjectPipemill(
-    val expression: String,
-    private val raw: String = expression,
-    override val alias: String = "$",
-) : Pipemill {
-
-    val objectDefinition: Map<String, String> by lazy {
-        regexNameValuePairs.findAll(expression).associate { it.groupValues[1] to it.groupValues[2] }
-    }
-
-    override fun copy(alias: String): Pipemill = copy(expression = expression, alias = alias)
-
-    override fun toString(): String = raw
 }
 
 fun main(args: Array<String>) {
