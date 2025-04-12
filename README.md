@@ -15,17 +15,16 @@ In addition to providing a solid foundation for custom commands, `exec` also com
 
 | Subcommand       | Description                                 |
 |------------------|---------------------------------------------|
-| `fetch`          | Fetch webpage content and save it to a file  |
-| `json2csv`       | Convert nested JSON into flat CSV files       |
-| `save-cookies`   | Save browser cookies to a file for reuse     |
-| `antibot`        | Basic anti-bot checking                     |
+| `fetch`          | Fetch webpage content and save it to a file |
+| `html2csv`       | Convert HTML into CSV files                 |
+| `json2csv`       | Convert JSON into CSV files                 |
+| `save-cookies`   | Save browser cookies to a file for reuse    |
 
 ## Quick Start
 
 ### 1. Download the All-in-One JAR
 
-The latest **all-in-one executable JAR** can be downloaded from [Maven Central](https://search.maven.org/artifact/io.johnsonlee/exec).  
-Save it as `exec-all.jar`.
+The latest **all-in-one executable JAR** can be downloaded from [Maven Central](https://search.maven.org/artifact/io.johnsonlee/exec). Save it as `exec-all.jar`.
 
 ### 2. Run
 
