@@ -121,7 +121,7 @@ import picocli.CommandLine
  * For further details and examples, see project documentation.
  */
 @AutoService(Command::class)
-class JSON2CSVCommand : DOM2CSVCommand() {
+open class JSON2CSVCommand : DOM2CSVCommand() {
 
     companion object {
         val objectMapper = jacksonObjectMapper().apply {
@@ -131,7 +131,7 @@ class JSON2CSVCommand : DOM2CSVCommand() {
         }
     }
 
-    override fun parse(input: InputStream): DOMContext = JsonDOMContext(objectMapper.readTree(input))
+    override fun parse(input: InputStream, location: String): DOMContext = JsonDOMContext(objectMapper.readTree(input))
 
 }
 

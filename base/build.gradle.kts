@@ -14,6 +14,7 @@ dependencies {
 
     api(kotlin("bom"))
     api(kotlin("stdlib"))
+    api(libs.kotlinx.coroutines.core)
     api(libs.auto.service)
     api(libs.pico.cli)
     api(libs.jackson.module.kotlin)

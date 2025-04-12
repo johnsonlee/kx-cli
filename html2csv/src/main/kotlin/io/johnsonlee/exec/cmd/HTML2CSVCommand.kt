@@ -1,7 +1,6 @@
 package io.johnsonlee.exec.cmd
 
 import com.google.auto.service.AutoService
-import java.io.File
 import java.io.InputStream
 import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
@@ -121,27 +120,14 @@ import picocli.CommandLine
 @AutoService(Command::class)
 class HTML2CSVCommand : DOM2CSVCommand() {
 
-    override fun parse(input: String): DOMContext {
-        return if (input.startsWith("http://") || input.startsWith("https://")) {
-            val response = get(url())
-            if (response.isSuccessful) {
-                response.body?.let { body ->
-                    body.byteStream().use {
-                        parse(it, body.contentType()?.charset())
-                    }
-                } ?: error("Loading JSON from $input failed")
-            } else {
-                error("Loading JSON from $input failed: ${response.code} ${response.message}")
-            }
-        } else {
-            File(input).inputStream().use(::parse)
-        }
+    override fun parse(input: String): DOMContext = get(input) {
+        parse(it, null, input)
     }
 
-    override fun parse(input: InputStream): DOMContext = parse(input, null)
+    override fun parse(input: InputStream, location: String): DOMContext = parse(input, null, location)
 
-    private fun parse(input: InputStream, charset: Charset? = null): DOMContext {
-        val doc = Jsoup.parse(input, (charset ?: StandardCharsets.UTF_8).name(), this.input)
+    private fun parse(input: InputStream, charset: Charset?, location: String): DOMContext {
+        val doc = Jsoup.parse(input, (charset ?: StandardCharsets.UTF_8).name(), location)
         return XmlDOMContext(doc)
     }
 }

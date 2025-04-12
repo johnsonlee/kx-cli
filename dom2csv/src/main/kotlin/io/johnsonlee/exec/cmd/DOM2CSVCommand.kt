@@ -1,8 +1,9 @@
 package io.johnsonlee.exec.cmd
 
-import io.johnsonlee.exec.internal.capitalize
 import java.io.File
-import java.io.InputStream
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import picocli.CommandLine.Option
 
 abstract class DOM2CSVCommand : FetchCommand(), DOMParser {
@@ -13,7 +14,7 @@ abstract class DOM2CSVCommand : FetchCommand(), DOMParser {
     @Option(names = ["--no-header"], description = ["No header row"], required = false)
     var noHeader: Boolean = false
 
-    @Option(names = ["-r", "--row"], description = ["Row expression"])
+    @Option(names = ["-r", "--row"], description = ["Row expression"], required = true)
     lateinit var rowExpression: String
 
     @Option(names = ["-d", "--delimiter"], description = ["Delimiter of columns"], required = false, defaultValue = ",")
@@ -22,55 +23,36 @@ abstract class DOM2CSVCommand : FetchCommand(), DOMParser {
     @Option(names = ["-q", "--text-qualifier"], description = ["Text qualifier of columns"], required = false, defaultValue = "\"")
     lateinit var textQualifier: String
 
-    override fun parse(input: String): DOMContext {
-        return if (input.startsWith("http://") || input.startsWith("https://")) {
-            val response = get(url())
-            if (response.isSuccessful) {
-                response.body?.byteStream()?.use(::parse) ?: error("Loading document from $input failed")
-            } else {
-                error("Loading document from $input failed: ${response.code} ${response.message}")
-            }
-        } else {
-           File(input).inputStream().use(::parse)
-        }
+    override fun parse(input: String): DOMContext = get(input) {
+        parse(it, input)
     }
 
-    override fun run() {
-        val root = parse(this.input)
-        val global = Variable(root)
-        val input = Variable(root.newTextNode(this.input).context)
-        val variables = VariableTable(global, mapOf("\$" to global, "\$__input__" to input))
-
+    override fun run() = runBlocking {
         File(output).printWriter().use { printer ->
-            val initialPipeline = listOf(PipemillContext(rowExpression, variables))
-            val steps = parsePipemills(rowExpression)
-
             if (noHeader) {
                 // ignore header
             } else if (::header.isInitialized && header.isNotEmpty()) {
                 printer.println(header.joinToString(delimiter))
-            } else {
-                (steps.last() as? ObjectPipemill)?.objectDefinition?.keys?.joinToString(delimiter) {
-                    it.capitalize()
-                }?.let(printer::println)
             }
 
-            evaluatePipeline(initialPipeline, steps).forEach { row ->
-                printer.println(row.joinToString(delimiter) {
-                    it.text.takeIf(String::isNotBlank)?.let { text ->
-                        "$textQualifier${text}$textQualifier"
-                    } ?: ""
-                })
-            }
+            fetch { input ->
+                input to parse(input)
+            }.map { (input, root) ->
+                val global = Variable(root)
+                val source = Variable(root.newTextNode(input).context)
+                val variables = VariableTable(global, mapOf("\$" to global, "\$__source__" to source))
+                val initialPipeline = listOf(PipemillContext(rowExpression, variables))
+                val pipemills = parsePipemills(rowExpression)
+
+                evaluatePipeline(initialPipeline, pipemills).forEach { row ->
+                    printer.println(row.joinToString(delimiter) {
+                        it.text.takeIf(String::isNotBlank)?.let { text ->
+                            "$textQualifier${text.trim()}$textQualifier"
+                        } ?: ""
+                    })
+                }
+            }.collect()
         }
-    }
-
-    private fun evaluateRowExpression(expression: String, variables: VariableTable): Sequence<List<DOMNode>> {
-        val initialPipeline = listOf(
-            PipemillContext(expression, variables)
-        )
-        val steps = parsePipemills(expression)
-        return evaluatePipeline(initialPipeline, steps, 0)
     }
 
     private fun parsePipemills(expression: String): List<Pipemill> = expression.split("|").map {
@@ -223,70 +205,11 @@ abstract class DOM2CSVCommand : FetchCommand(), DOMParser {
 
 }
 
-interface DOMContext {
-    val root: DOMNode
-    fun evaluate(path: String, variables: VariableTable): List<DOMNode>
-    fun newTextNode(value: String): DOMNode
-    fun newNode(attrs: Map<String, Any>): DOMNode
-    fun newNode(vararg attrs: Pair<String, Any>): DOMNode = newNode(attrs.toMap())
-}
-
-interface DOMNode {
-    val context: DOMContext
-    val text: String
-    val isIterable: Boolean
-    val children: List<DOMNode>
-}
-
-interface DOMParser {
-    fun parse(input: String): DOMContext
-    fun parse(input: InputStream): DOMContext
-}
-
-interface DOMPath {
-    val path: String
-    fun evaluate(variables: VariableTable): List<DOMNode>
-}
-
 private val regexObject = "\\s*\\{[^{}]+\\}\\s*".toRegex()
 
 private val regexNameValuePairs = "\\s*(\\w+)\\s*:\\s*([^{},]+)\\s*".toRegex()
 
-/**
- * Represents a variable which refer to a DOM element
- *
- * @param context The DOM document
- */
-data class Variable(val context: DOMContext)
-
-data class VariableTable(
-    val global: Variable,
-    val variables: Map<String, Variable>
-) {
-
-    val root: Variable = this["\$"] ?: error("Root node not found")
-
-    operator fun get(name: String): Variable? = variables[name]
-
-    operator fun plus(pair: Pair<String, Variable>): VariableTable = copy(variables = variables + pair)
-
-    fun evaluate(path: String): List<DOMNode> = root.context.evaluate(path, this)
-
-}
-
-internal data class PipemillContext(
-    val expression: String,
-    val variables: VariableTable
-)
-
-internal sealed interface Pipemill {
-    val alias: String
-        get() = "$"
-
-    fun copy(alias: String): Pipemill
-}
-
-internal data class SimplePipemill(
+private data class SimplePipemill(
     val path: String,
     private val raw: String = path,
     override val alias: String = "$",
@@ -296,7 +219,7 @@ internal data class SimplePipemill(
     override fun toString(): String = raw
 }
 
-internal data class ObjectPipemill(
+private data class ObjectPipemill(
     val expression: String,
     private val raw: String = expression,
     override val alias: String = "$",

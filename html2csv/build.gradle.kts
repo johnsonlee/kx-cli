@@ -12,7 +12,7 @@ dependencies {
     kapt(libs.pico.codegen)
 
     api(libs.jsoup)
-    api(project(":fetch"))
+    api(project(":dom2csv"))
 }
 
 val shadowJar by tasks.getting(ShadowJar::class) {

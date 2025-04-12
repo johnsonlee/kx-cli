@@ -6,6 +6,7 @@ import com.fasterxml.jackson.module.kotlin.addMixIn
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import com.google.auto.service.AutoService
+import com.microsoft.playwright.Page
 import com.microsoft.playwright.options.Cookie
 import io.johnsonlee.exec.internal.network.HttpCookieMixin
 import io.johnsonlee.exec.internal.playwright.PlaywrightManager
@@ -29,9 +30,11 @@ class SaveCookiesCommand : IOCommand() {
     }
 
     override fun run() = PlaywrightManager.newContext().use { context ->
-        context.newPage().apply {
-            navigate(input)
-        }.waitForClose()
+        input.map { url ->
+            context.newPage().apply {
+                navigate(url)
+            }
+        }.onEach(Page::waitForClose)
 
         val cookies = context.cookies().map(Cookie::asHttpCookie)
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(File(output), cookies)
