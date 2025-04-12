@@ -1,5 +1,3 @@
-# exec
-
 ## Overview
 
 `exec` is a **flexible and extensible command-line framework**, designed to help developers build and manage their own CLI tools under a unified entry point.
