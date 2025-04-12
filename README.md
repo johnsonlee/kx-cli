@@ -39,19 +39,25 @@ java -jar exec-all.jar exec <subcommand> [options]
 #### Fetch a Webpage
 
 ```sh
-java -jar exec-all.jar exec fetch --input https://example.com --output page.html
+java -jar exec-all.jar exec fetch https://example.com --output page.html
 ```
 
 #### Save Browser Cookies
 
 ```sh
-java -jar exec-all.jar exec save-cookies --input https://example.com/login --output cookies.json
+java -jar exec-all.jar exec save-cookies https://example.com/login --output cookies.json
 ```
 
 #### Convert JSON to CSV
 
 ```sh
-java -jar exec-all.jar exec json2csv --input data.json --output data.csv
+java -jar exec-all.jar exec json2csv data.json -r $.data[*] --output data.csv
+```
+
+#### Convert HTML to CSV
+
+```
+java -jar exec-all.jar exec html2csv index.html -r //a --output data.csv
 ```
 
 ## Extending `exec`
