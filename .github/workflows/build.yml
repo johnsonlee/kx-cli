@@ -1,0 +1,73 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [ '*' ]
+  pull_request:
+    branches: [ '*' ]
+
+  repository_dispatch:
+    types: [test]
+
+jobs:
+  run-unit-test:
+    name: Build and test
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
+    - name: Setup Java
+      uses: actions/setup-java@v2
+      with:
+        distribution: 'adopt'
+        java-version: '17'
+
+    - name: Compile and test
+      run: ./gradlew shadowJar check -S --no-daemon
+      env:
+        JAVA_OPTS: -Xmx8g -XX:MetaspaceSize=1g -Dfile.encoding=UTF-8
+        JVM_OPTS:  -Xmx8g -XX:MetaspaceSize=1g -Dfile.encoding=UTF-8
+
+    - name: Upload `kx-fetch`
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kx-fetch
+        path: fetch/build/executable/fetch
+
+    - name: Upload `kx-html2csv`
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kx-html2csv
+        path: html2csv/build/executable/html2csv
+
+    - name: Upload `kx-json2csv`
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kx-json2csv
+        path: json2csv/build/executable/json2csv
+
+    - name: Upload `kx-xml2json`
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kx-xml2json
+        path: xml2json/build/executable/xml2json
+
+    - name: Upload `kx-save-cookies`
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kx-save-cookies
+        path: save-cookies/build/executable/save-cookies
+
+    - name: Upload `kx`
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: kx
+        path: build/executable/kx
