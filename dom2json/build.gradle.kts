@@ -11,4 +11,7 @@ dependencies {
 
     api(project(":fetch"))
     api(libs.jackson.dataformat.xml)
+    api(libs.jsonpath)
+    api(libs.jsoup)
+    api(libs.tika.core)
 }

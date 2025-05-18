@@ -11,5 +11,5 @@ dependencies {
 
     api(libs.jackson.databind)
     api(libs.jsonpath)
-    api(project(":dom2csv"))
+    api(project(":fetch"))
 }

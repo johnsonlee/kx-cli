@@ -3,11 +3,9 @@ package io.johnsonlee.kx.cmd
 import com.google.auto.service.AutoService
 import io.johnsonlee.kx.internal.network.toCookieStore
 import java.io.File
-import java.io.IOException
 import java.io.InputStream
 import java.net.CookieManager
 import java.net.HttpCookie
-import java.net.URL
 import kotlin.system.exitProcess
 import kotlinx.coroutines.flow.asFlow
 import kotlinx.coroutines.flow.collect
@@ -23,6 +21,7 @@ import okhttp3.Authenticator
 import okhttp3.Credentials
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.JavaNetCookieJar
+import okhttp3.MediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -40,7 +39,11 @@ open class FetchCommand : IOCommand() {
     @CommandLine.Option(names = ["--cookie-jar"], description = ["Cookie jar file"])
     lateinit var cookieJar: File
 
-    @CommandLine.Option(names = ["--max-request-per-minute"], description = ["Max request per minute"], defaultValue = "30")
+    @CommandLine.Option(
+        names = ["--max-request-per-minute"],
+        description = ["Max request per minute"],
+        defaultValue = "30"
+    )
     var maxRequestPerMinute: Int = 30
 
     private val authenticator: Authenticator = Authenticator { _, response ->
@@ -88,7 +91,10 @@ open class FetchCommand : IOCommand() {
             .authenticator(authenticator)
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder().apply {
-                    header("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7")
+                    header(
+                        "accept",
+                        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
+                    )
                     header("accept-language", "en-US,en")
                     header("cache-control", "no-cache")
                     header("pragma", "no-cache")
@@ -101,7 +107,10 @@ open class FetchCommand : IOCommand() {
                     header("sec-fetch-site", "same-origin")
                     header("sec-fetch-user", "?1")
                     header("upgrade-insecure-requests", "1")
-                    header("user-agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36")
+                    header(
+                        "user-agent",
+                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+                    )
                 }.build()
                 chain.proceed(request)
             }
@@ -114,36 +123,30 @@ open class FetchCommand : IOCommand() {
     override fun run(): Unit = runBlocking {
         File(output).outputStream().use { dest ->
             input.asFlow().map { url ->
-                get(url) { src ->
+                get(url) { _, src ->
                     src.copyTo(dest)
                 }
             }.collect()
         }
     }
 
-    protected fun <T> get(uri: String, transform: (InputStream) -> T): T = try {
+    protected fun <T> get(uri: String, transform: (MediaType?, InputStream) -> T): T = try {
         val url = uri.toHttpUrl()
         val request = Request.Builder().url(url).build()
         client.newCall(request).execute().use { response ->
             response.takeIf(Response::isSuccessful)?.body?.use { body ->
-                body.byteStream().use {
-                    transform(it)
+                body.byteStream().buffered().use {
+                    transform(body.contentType(), it)
                 }
             } ?: error("Loading document from $uri failed: ${response.code}")
         }
     } catch (e: IllegalArgumentException) {
         if (uri == "--" || uri == "-") {
-            transform(System.`in`)
+            transform(null, System.`in`.buffered())
         } else {
-            try {
-                URL(uri).openStream().use {
-                    transform(it)
-                }
-            } catch (e: IOException) {
-                File(uri).takeIf(File::exists)?.inputStream()?.use {
-                    transform(it)
-                } ?: error("Loading document from $uri failed: ${e.message}")
-            }
+            File(uri).takeIf(File::exists)?.inputStream()?.buffered()?.use {
+                transform(null, it)
+            } ?: error("Loading document from $uri failed: ${e.message}")
         }
     }
 }

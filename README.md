@@ -15,11 +15,10 @@ In addition to providing a solid foundation for custom commands, `kx` also comes
 
 | Subcommand | Description                                 |
 |------------|---------------------------------------------|
-| `browser`  | Open browser for automation                 |
 | `fetch`    | Fetch webpage content and save it to a file |
-| `html2csv` | Convert HTML into CSV files                 |
+| `browser`  | Open browser for automation                 |
+| `dom2json` | Convert XML/HTML DOM to JSON                |
 | `json2csv` | Convert JSON into CSV files                 |
-| `xml2json` | Convert XML to JSON                         |
 
 ## Quick Start
 
@@ -46,7 +45,7 @@ With **Java 17+** installed, you can run:
 #### Save Browser Cookies
 
 ```sh
-./kx save-cookies https://example.com/login --output cookies.json
+./kx browser https://example.com/login save-cookie --cookie-file cookies.json
 ```
 
 #### Convert JSON to CSV
@@ -55,16 +54,10 @@ With **Java 17+** installed, you can run:
 ./kx json2csv data.json -r '$.data[*]' --output data.csv
 ```
 
-#### Convert HTML to CSV
+#### Convert XML/HTML DOM to JSON
 
 ```sh
-./kx html2csv index.html -r '//a' --output data.csv
-```
-
-#### Convert XML to JSON
-
-```sh
-./kx xml2json data.xml
+./kx dom2json data.xml
 ```
 
 ## Extending `kx`

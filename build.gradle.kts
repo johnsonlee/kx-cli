@@ -14,9 +14,8 @@ plugins {
 dependencies {
     implementation(project(":browser"))
     implementation(project(":fetch"))
-    implementation(project(":html2csv"))
+    implementation(project(":dom2json"))
     implementation(project(":json2csv"))
-    implementation(project(":xml2json"))
 }
 
 allprojects {

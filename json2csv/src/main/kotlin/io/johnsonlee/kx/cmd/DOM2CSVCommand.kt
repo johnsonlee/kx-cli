@@ -31,7 +31,7 @@ abstract class DOM2CSVCommand : FetchCommand(), DOMParser {
     @Option(names = ["-q", "--text-qualifier"], description = ["Text qualifier of columns"], required = false, defaultValue = "\"")
     lateinit var textQualifier: String
 
-    override fun parse(input: String): DOMContext = get(input) {
+    override fun parse(input: String): DOMContext = get(input) { _, it ->
         parse(it, input)
     }
 
