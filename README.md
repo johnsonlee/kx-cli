@@ -54,10 +54,10 @@ With **Java 17+** installed, you can run:
 ./kx json2csv data.json -r '$.data[*]' --output data.csv
 ```
 
-#### Convert XML/HTML DOM to JSON
+#### Convert XML/HTML DOM to JSON and Query with JSONPath
 
 ```sh
-./kx dom2json data.xml
+./kx dom2json --json-path '$..a[?(@.@href =~ /.*\.xml$/ && @.#text =~ /.*\.xml$/)].@abs:href https://example.com/index.html'
 ```
 
 ## Extending `kx`
