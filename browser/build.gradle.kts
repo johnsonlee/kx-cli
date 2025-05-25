@@ -9,6 +9,7 @@ dependencies {
     kapt(libs.auto.service)
     kapt(libs.pico.codegen)
 
+    api(libs.auto.service)
     api(libs.playwright)
     api(project(":base"))
 }

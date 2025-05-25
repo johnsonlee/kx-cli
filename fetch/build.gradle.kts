@@ -9,8 +9,10 @@ dependencies {
     kapt(libs.auto.service)
     kapt(libs.pico.codegen)
 
+    api(libs.auto.service)
     api(libs.okhttp)
     api(libs.okhttp.urlconnection)
+    api(libs.kotlinx.coroutines.core)
     api(libs.kotlinx.serialization.json)
     api(project(":base"))
 }
