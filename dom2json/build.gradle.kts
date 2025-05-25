@@ -13,5 +13,4 @@ dependencies {
     api(libs.jackson.dataformat.xml)
     api(libs.jsonpath)
     api(libs.jsoup)
-    api(libs.tika.core)
 }

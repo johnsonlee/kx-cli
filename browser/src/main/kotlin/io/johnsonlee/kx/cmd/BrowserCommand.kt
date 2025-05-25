@@ -8,7 +8,7 @@ import io.johnsonlee.kx.internal.playwright.PlaywrightManager
 import io.johnsonlee.kx.internal.playwright.waitForClose
 import kotlin.system.exitProcess
 import picocli.CommandLine
-import picocli.CommandLine.ParentCommand
+import picocli.CommandLine.Mixin
 
 @AutoService(Command::class)
 @CommandLine.Command(
@@ -20,14 +20,14 @@ import picocli.CommandLine.ParentCommand
 )
 class BrowserCommand : Command {
 
-    @ParentCommand
-    var parent: Kx? = null
+    @Mixin
+    lateinit var global: GlobalOptions
 
     @CommandLine.Parameters(index = "0", description = ["URLs"], arity = "1..*")
     lateinit var input: List<String>
 
     override fun verbose(message: String) {
-        parent?.verbose(message)
+        global.verbose(message)
     }
 
     override fun run() = Unit

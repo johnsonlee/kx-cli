@@ -1,12 +1,12 @@
 package io.johnsonlee.kx.cmd
 
 import picocli.CommandLine
-import picocli.CommandLine.ParentCommand
+import picocli.CommandLine.Mixin
 
 abstract class IOCommand : Command {
 
-    @ParentCommand
-    var parent: Kx? = null
+    @Mixin
+    lateinit var global: GlobalOptions
 
     @CommandLine.Parameters(index = "0", description = ["URIs to read or `-` for stdin"], arity = "1..*")
     lateinit var input: List<String>
@@ -15,7 +15,7 @@ abstract class IOCommand : Command {
     lateinit var output: String
 
     override fun verbose(message: String) {
-        parent?.verbose(message)
+        global.verbose(message)
     }
 
 }
