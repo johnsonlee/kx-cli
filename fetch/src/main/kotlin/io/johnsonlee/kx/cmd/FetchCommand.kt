@@ -95,12 +95,32 @@ open class FetchCommand : IOCommand() {
     }
 
     override fun run(): Unit = runBlocking {
-        File(output).outputStream().use { dest ->
-            input.asFlow().map { url ->
-                get(url) { _, src ->
-                    src.copyTo(dest)
+        when {
+            input.size > 1 -> {
+                val valid = output in STDOUT
+                input.asFlow().map { uri ->
+                    val url = uri.toHttpUrl()
+                    val output = if (valid) {
+                        File(output)
+                    } else {
+                        File(output, url.encodedPath.removeSuffix("/").substringAfterLast("/"))
+                    }
+                    output.outputStream().use { dest ->
+                        get(uri) { _, src ->
+                            src.copyTo(dest)
+                        }
+                    }
+                }.collect()
+            }
+            input.size == 1 -> {
+                File(output).also {
+                    it.parentFile.mkdirs()
+                }.outputStream().use { output ->
+                    get(input.first()) { _, src ->
+                        src.copyTo(output)
+                    }
                 }
-            }.collect()
+            }
         }
     }
 
@@ -124,6 +144,8 @@ open class FetchCommand : IOCommand() {
         }
     }
 }
+
+private val STDOUT = setOf("-", "/dev/stdout", "/dev/null", "/dev/fd/1", "/proc/self/fd/1")
 
 fun main(args: Array<String>) {
     exitProcess(CommandLine(FetchCommand()).execute(*args))
