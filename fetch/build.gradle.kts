@@ -10,6 +10,7 @@ dependencies {
     kapt(libs.pico.codegen)
 
     api(libs.auto.service)
+    api(libs.johnsonlee.ktx.okhttp3)
     api(libs.okhttp)
     api(libs.okhttp.urlconnection)
     api(libs.kotlinx.coroutines.core)

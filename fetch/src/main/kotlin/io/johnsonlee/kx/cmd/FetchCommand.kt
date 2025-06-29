@@ -1,7 +1,8 @@
 package io.johnsonlee.kx.cmd
 
 import com.google.auto.service.AutoService
-import io.johnsonlee.kx.internal.network.toCookieStore
+import io.johnsonlee.ktx.okhttp.okhttpClient
+import io.johnsonlee.ktx.okhttp.toCookieStore
 import java.io.File
 import java.io.InputStream
 import java.net.CookieManager
@@ -22,7 +23,6 @@ import okhttp3.Credentials
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.JavaNetCookieJar
 import okhttp3.MediaType
-import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
 import picocli.CommandLine
@@ -87,34 +87,8 @@ open class FetchCommand : IOCommand() {
         } else {
             null
         }
-        OkHttpClient.Builder()
+        okhttpClient(useDaemonThread = true).newBuilder()
             .authenticator(authenticator)
-            .addInterceptor { chain ->
-                val request = chain.request().newBuilder().apply {
-                    header(
-                        "accept",
-                        "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7"
-                    )
-                    header("accept-language", "en-US,en")
-                    header("cache-control", "no-cache")
-                    header("pragma", "no-cache")
-                    header("priority", "u=0, i")
-                    header("sec-ch-ua", "\"Google Chrome\";v=\"135\", \"Not-A.Brand\";v=\"8\", \"Chromium\";v=\"135\"")
-                    header("sec-ch-ua-mobile", "?0")
-                    header("sec-ch-ua-platform", "\"macOS\"")
-                    header("sec-fetch-dest", "document")
-                    header("sec-fetch-mode", "navigate")
-                    header("sec-fetch-site", "same-origin")
-                    header("sec-fetch-user", "?1")
-                    header("upgrade-insecure-requests", "1")
-                    header(
-                        "user-agent",
-                        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
-                    )
-                }.build()
-                chain.proceed(request)
-            }
-            .addInterceptor(DomainRateLimitInterceptor(maxRequestPerMinute))
             .addNetworkInterceptor(VerboseInterceptor(::verbose))
             .cookieJar(JavaNetCookieJar(CookieManager(cookieStore, null)))
             .build()

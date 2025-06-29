@@ -40,32 +40,6 @@ allprojects {
             }
             mergeServiceFiles()
         }
-
-        val buildExecutable by tasks.registering {
-            group = "distribution"
-            description = "Build self-contained executable CLI"
-
-            val bin = if (project != rootProject) {
-                "${rootProject.name}-${project.name}"
-            } else {
-                project.name
-            }
-
-            println("Building executable for $bin")
-
-            doLast {
-                layout.buildDirectory.get().dir("executable").dir(bin).asFile.apply {
-                    parentFile.mkdirs()
-                    outputStream().use { out ->
-                        rootProject.file("launcher.sh").inputStream().copyTo(out)
-                        shadowJar.archiveFile.get().asFile.inputStream().copyTo(out)
-                    }
-                    setExecutable(true, false)
-                }
-            }
-        }
-
-        shadowJar.finalizedBy(buildExecutable)
     }
 
     val generateVersionProperties by tasks.registering {
@@ -127,3 +101,29 @@ allprojects {
         }
     }
 }
+
+val shadowJar by tasks.getting(ShadowJar::class)
+val buildExecutable by tasks.registering {
+    group = "distribution"
+    description = "Build self-contained executable CLI"
+
+    val bin = if (project != rootProject) {
+        "${rootProject.name}-${project.name}"
+    } else {
+        project.name
+    }
+
+    println("Building executable for $bin")
+
+    doLast {
+        layout.buildDirectory.get().dir("executable").dir(bin).asFile.apply {
+            parentFile.mkdirs()
+            outputStream().use { out ->
+                rootProject.file("launcher.sh").inputStream().copyTo(out)
+                shadowJar.archiveFile.get().asFile.inputStream().copyTo(out)
+            }
+            setExecutable(true, false)
+        }
+    }
+}
+shadowJar.finalizedBy(buildExecutable)

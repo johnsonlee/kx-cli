@@ -8,6 +8,7 @@ okhttp = "4.12.0"
 pico-cli = "4.7.6"
 playwright = "1.50.0"
 bouncycastle = "1.80"
+ktx = "0.5.0"
 
 [libraries]
 auto-service = { module = "com.google.auto.service:auto-service", version.ref = "auto-service" }
@@ -17,6 +18,7 @@ jackson-databind = { module = "com.fasterxml.jackson.core:jackson-databind", ver
 jackson-dataformat-xml = { module = "com.fasterxml.jackson.dataformat:jackson-dataformat-xml", version.ref = "jackson" }
 jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "jackson" }
 jackson-module-jsr310 = { module = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310", version.ref = "jackson" }
+johnsonlee-ktx-okhttp3 = { module = "io.johnsonlee.ktx:okhttp3", version.ref = "ktx" }
 jsonpath = { module = "com.jayway.jsonpath:json-path", version.ref = "jsonpath" }
 jsoup = { module = "org.jsoup:jsoup", version.ref = "jsoup" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx" }

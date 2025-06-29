@@ -10,6 +10,7 @@ on:
 jobs:
   publish:
     name: Publish artifacts
+    permissions: write-all
     runs-on: ubuntu-latest
     if: github.repository_owner == 'johnsonlee'
 
@@ -31,21 +32,11 @@ jobs:
         JAVA_OPTS: -Xmx8g -XX:MetaspaceSize=1g -Dfile.encoding=UTF-8
         JVM_OPTS: -Xmx8g -XX:MetaspaceSize=1g -Dfile.encoding=UTF-8
 
-    - name: Archive executables
-      run: |
-        mkdir dist
-        for f in $(find . -type f -path "**/build/executable/*" -perm -111); do
-          base=$(basename "$f")
-          tar_name="dist/${base%.*}.tar.gz"
-          echo "Compressing $f -> $tar_name"
-          tar -czf "$tar_name" -C "$(dirname "$f")" "$base"
-        done
-
     - name: Publish archived executables to GitHub Release
       uses: softprops/action-gh-release@v1
       with:
         tag_name: ${{ github.ref_name }}
-        files: dist/*.tar.gz
+        files: build/executable/kx
         generate_release_notes: true
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -55,7 +46,15 @@ jobs:
         echo "Release version ${GITHUB_REF/refs\/tags\/v/} ..."
         echo "Create GPG private key"
         echo $GPG_KEY_ARMOR | base64 --decode > ${GITHUB_WORKSPACE}/secring.gpg
-        ./gradlew publishMavenJavaPublicationToSonatypeRepository closeAndReleaseRepository -S --no-daemon \
+        ./gradlew clean publishMavenJavaPublicationToSonatypeRepository -S --no-daemon \
+            -Pversion=${GITHUB_REF/refs\/tags\/v/} \
+            -POSSRH_USERNAME=${OSSRH_USERNAME} \
+            -POSSRH_PASSWORD=${OSSRH_PASSWORD} \
+            -POSSRH_PACKAGE_GROUP=${OSSRH_PACKAGE_GROUP} \
+            -Psigning.keyId=${GPG_KEY_ID} \
+            -Psigning.password=${GPG_PASSPHRASE} \
+            -Psigning.secretKeyRingFile=${GITHUB_WORKSPACE}/secring.gpg
+        ./gradlew closeAndReleaseRepository -S --no-daemon \
             -Pversion=${GITHUB_REF/refs\/tags\/v/} \
             -POSSRH_USERNAME=${OSSRH_USERNAME} \
             -POSSRH_PASSWORD=${OSSRH_PASSWORD} \
